@@ -1,0 +1,6 @@
+{
+  "name": "A11y Sim",
+  "description": "An advanced platform to simulate how designs appear to users with various vision impairments. Analyze color palettes for WCAG compliance and receive AI-powered recommendations to create more inclusive web experiences.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
