@@ -37,7 +37,7 @@ export const Donation: React.FC<DonationProps> = ({ isOpen, onClose }) => {
                         </button>
                         
                         <div className="p-8 text-center">
-                            <Icon name="coffee" className="w-12 h-12 mx-auto text-amber-500 mb-4" />
+                            <Icon name="eye" className="w-12 h-12 mx-auto text-blue-600 mb-4" />
                             <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Support A11y Sim</h2>
                             <p className="text-slate-600 dark:text-slate-300 mt-2 mb-6">
                                 This tool is open-source and free to use. Your contribution helps cover our costs and supports future development.

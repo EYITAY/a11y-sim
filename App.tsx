@@ -7,16 +7,19 @@ import { Donation } from './components/Donation';
 import { initializeAnalytics, trackEvent } from './services/analyticsService';
 import AdminLogin from './components/AdminLogin';
 import AdminAnalytics from './components/AdminAnalytics';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import PrivacyPolicy from './pages/privacy';
 import TermsOfUse from './pages/terms';
 import RefundPolicy from './pages/refund';
+import DonationPolicy from './pages/donation-policy';
 import EUVisitors from './pages/eu';
 import CaliforniaVisitors from './pages/california';
+import Merch from './pages/merch';
 
-const App: React.FC = () => {
+const AppRoutes: React.FC = () => {
   const [view, setView] = useState<'landing' | 'simulator' | 'analytics' | 'admin-login' | 'admin-analytics'>('landing');
   const [isDonationModalOpen, setIsDonationModalOpen] = useState(false);
+  const routerNavigate = useNavigate();
 
   useEffect(() => {
     initializeAnalytics();
@@ -28,6 +31,7 @@ const App: React.FC = () => {
     if (urlParams.has('payment_success')) {
       setIsDonationModalOpen(true);
       setView('simulator');
+      routerNavigate('/simulator');
       void trackEvent('payment_return_detected', { hasSessionId: Boolean(urlParams.get('session_id')) });
     }
 
@@ -52,7 +56,16 @@ const App: React.FC = () => {
       void trackEvent('analytics_opened', { from: view });
     }
 
+    const routeByView: Record<typeof targetView, string> = {
+      landing: '/',
+      simulator: '/simulator',
+      analytics: '/analytics',
+      'admin-login': '/admin-login',
+      'admin-analytics': '/admin-analytics',
+    };
+
     setView(targetView);
+    routerNavigate(routeByView[targetView]);
     window.scrollTo(0, 0);
   };
 
@@ -66,25 +79,33 @@ const App: React.FC = () => {
   };
 
   return (
-    <Router>
+    <>
       <Header onNavigate={navigate} onOpenDonation={handleOpenDonation} />
       <Routes>
         <Route path="/" element={<LandingPage onLaunch={() => navigate('simulator')} />} />
         <Route path="/simulator" element={<SimulatorApp />} />
-        <Route path="/admin-login" element={<AdminLogin onSuccess={() => setView('admin-analytics')} />} />
+        <Route path="/admin-login" element={<AdminLogin onSuccess={() => navigate('admin-analytics')} />} />
         <Route path="/admin-analytics" element={<AdminAnalytics />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfUse />} />
         <Route path="/refund" element={<RefundPolicy />} />
+        <Route path="/donation-policy" element={<DonationPolicy />} />
         <Route path="/eu" element={<EUVisitors />} />
         <Route path="/california" element={<CaliforniaVisitors />} />
+        <Route path="/merch" element={<Merch />} />
       </Routes>
       <Donation 
         isOpen={isDonationModalOpen} 
         onClose={handleCloseDonation} 
       />
-    </Router>
+    </>
   );
 };
+
+const App: React.FC = () => (
+  <Router>
+    <AppRoutes />
+  </Router>
+);
 
 export default App;

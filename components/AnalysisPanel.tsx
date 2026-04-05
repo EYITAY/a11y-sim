@@ -29,7 +29,7 @@ const AiPlaceholder: React.FC<{ isLoading: boolean }> = ({ isLoading }) => {
     <div className="flex-grow flex flex-col items-center justify-center text-center p-8 bg-slate-50 dark:bg-slate-800/50 rounded-lg min-h-[400px]">
       <Icon name="sparkles" className="w-10 h-10 text-slate-400 dark:text-slate-500 mx-auto" />
       <p className="mt-4 text-lg text-slate-600 dark:text-slate-300 font-semibold">Get Feedback</p>
-      <p className="text-sm text-slate-500 dark:text-slate-400">Click "Prepare Report" on the left to review contrast details and unlock AI insights.</p>
+      <p className="text-sm text-slate-500 dark:text-slate-400">Click "Prepare Report" on the left to review contrast details, then unlock the report via Stripe to generate AI insights.</p>
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Icon } from './Icon';
 import { FAQ } from './FAQ';
+import { useTranslation } from '../i18n';
 
 interface LandingPageProps {
   onLaunch: () => void;
@@ -40,8 +41,15 @@ const TestimonialCard: React.FC<{ quote: string; author: string; role: string; a
     </div>
 );
 
+const bugReportSubject = encodeURIComponent('Report a bug - A11y Sim');
+const bugReportBody = encodeURIComponent(
+    `Please describe the bug you encountered:\n\n- What did you expect to happen?\n- What actually happened?\n- Steps to reproduce the issue:\n\nDevice type (mobile or desktop):\nOperating system (e.g. Windows, macOS, Android, iOS):\nBrowser (e.g. Chrome, Safari, Firefox):\n\n📎 IMPORTANT: Please attach a screenshot of the bug before sending this email.\n   (You can paste or drag & drop an image into this email.)\n`
+);
+const bugReportHref = `mailto:support@alimieyitayo.com?subject=${bugReportSubject}&body=${bugReportBody}`;
+
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onLaunch }) => {
+    const { t } = useTranslation();
     const [adminTyped, setAdminTyped] = React.useState(false);
     const [inputBuffer, setInputBuffer] = React.useState('');
 
@@ -156,19 +164,35 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunch }) => {
         {/* Footer */}
         <footer className="py-8 border-t border-slate-200 dark:border-slate-800">
              <div className="container mx-auto px-4 text-center text-slate-500 dark:text-slate-400">
-                <p>&copy; {new Date().getFullYear()} A11y Sim. A Community Freeware.</p>
-                                <p>
-                                    <a href="https://alimieyitayo.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600">
-                                        Made with <span style={{color: 'red'}}>&hearts;</span> by Eyitayo Alimi @alimieyitayo
-                                    </a>
-                                </p>
-                                <div className="flex flex-wrap justify-center gap-4 mt-6 text-sm">
-                                    <a href="/privacy" className="underline hover:text-blue-600">Privacy Policy</a>
-                                    <a href="/terms" className="underline hover:text-blue-600">Terms of Use</a>
-                                    <a href="/refund" className="underline hover:text-blue-600">Refund Policy</a>
-                                    <a href="/eu" className="underline hover:text-blue-600">EU Visitors</a>
-                                    <a href="/california" className="underline hover:text-blue-600">California Visitors</a>
-                                </div>
+            <p>&copy; {new Date().getFullYear()} {t('footer_copyright')}</p>
+
+                <div className="mt-4 flex flex-col items-center space-y-2 text-xs">
+                    <span>
+                        Made with <span role="img" aria-label="love" className="text-red-500">♥</span> by
+                        <a href="https://www.alimieyitayo.com/" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600 ml-1">Eyitayo Alimi</a>
+                        <span className="mx-2">[at] [ /\ 7 ]</span>
+                        <a href="https://cyberplanethq.com/" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600 ml-1">CyberPlanet LLC</a>
+                    </span>
+
+                    <div className="flex flex-wrap justify-center gap-4">
+                        <a href="https://github.com/alimieyitayo" target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">GitHub</a>
+                        <a href="https://twitter.com/alimieyitayo" target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Twitter</a>
+                        <a href="https://linkedin.com/in/alimieyitayo" target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">LinkedIn</a>
+                        <a href="https://mastodon.social/@alimieyitayo" target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Mastodon</a>
+                        <a href="https://bsky.app/profile/alimieyitayo.bsky.social" target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Bluesky</a>
+                    </div>
+                </div>
+
+                <div className="flex flex-wrap justify-center gap-4 mt-6 text-sm">
+                                        <a href="/merch" className="underline hover:text-blue-600">Merch</a>
+                    <a href="/privacy" className="underline hover:text-blue-600">{t('footer_privacy_policy')}</a>
+                    <a href="/terms" className="underline hover:text-blue-600">{t('footer_terms_of_use')}</a>
+                    <a href="/refund" className="underline hover:text-blue-600">{t('footer_refund_policy')}</a>
+                    <a href="/donation-policy" className="underline hover:text-blue-600">{t('footer_donation_policy')}</a>
+                    <a href="/eu" className="underline hover:text-blue-600">{t('footer_eu_visitors')}</a>
+                    <a href="/california" className="underline hover:text-blue-600">{t('footer_california_visitors')}</a>
+                    <a href={bugReportHref} className="underline hover:text-blue-600">{t('footer_report_a_bug')}</a>
+                </div>
             </div>
         </footer>
     </div>
