@@ -18,9 +18,29 @@ type SummaryResponse = {
   note?: string;
 };
 
+type EventRow = {
+  eventName: string;
+  properties?: Record<string, unknown>;
+  context?: {
+    lastTouch?: {
+      source?: string;
+    };
+    firstTouch?: {
+      source?: string;
+    };
+  } | null;
+  ipAddress?: string;
+  ipHashHint?: string;
+  geo?: {
+    country?: string;
+    city?: string;
+    ip?: string;
+  };
+};
+
 export const AnalyticsDashboard: React.FC = () => {
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
-  const [eventRows, setEventRows] = useState<any[]>([]);
+  const [eventRows, setEventRows] = useState<EventRow[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [accessKey, setAccessKey] = useState<string>('');
@@ -37,9 +57,13 @@ export const AnalyticsDashboard: React.FC = () => {
     setErrorMessage(null);
 
     try {
+      const headers = {
+        'x-analytics-key': keyToUse,
+      };
+
       const response = await fetch('/api/analytics-summary', {
         headers: {
-          'x-analytics-key': keyToUse,
+          ...headers,
         },
       });
       if (!response.ok) {
@@ -59,13 +83,24 @@ export const AnalyticsDashboard: React.FC = () => {
         }
       }
       const data = await response.json() as SummaryResponse;
+      const eventsResponse = await fetch('/api/analytics-events', {
+        headers,
+      });
+
+      if (!eventsResponse.ok) {
+        throw new Error('Failed to load analytics events.');
+      }
+
+      const eventsData = await eventsResponse.json() as { events?: EventRow[] };
       setSummary(data);
+      setEventRows(eventsData.events ?? []);
       setIsAuthorized(true);
       window.sessionStorage.setItem('a11yAnalyticsAccessKey', keyToUse);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to fetch analytics summary.';
       setErrorMessage(message);
       setSummary(null);
+      setEventRows([]);
       setIsAuthorized(false);
       window.sessionStorage.removeItem('a11yAnalyticsAccessKey');
     } finally {
@@ -80,28 +115,6 @@ export const AnalyticsDashboard: React.FC = () => {
       void fetchSummary(storedKey);
     }
   }, []);
-
-  // Fetch eventRows after authorized
-  useEffect(() => {
-    if (!isAuthorized) return;
-    async function fetchEvents() {
-      try {
-        const res = await fetch('/server/data/events.ndjson');
-        if (res.ok) {
-          const text = await res.text();
-          const rows = text.split('\n').filter(Boolean).map(line => {
-            try {
-              return JSON.parse(line);
-            } catch {
-              return null;
-            }
-          }).filter(Boolean);
-          setEventRows(rows);
-        }
-      } catch {}
-    }
-    fetchEvents();
-  }, [isAuthorized]);
 
   const sourceCounts = (summary?.sourceCounts ?? {}) as Record<string, number>;
   const eventCounts = (summary?.eventCounts ?? {}) as Record<string, number>;
@@ -288,7 +301,7 @@ export const AnalyticsDashboard: React.FC = () => {
                   <tr key={idx} className="border-b border-slate-200 dark:border-slate-700">
                     <td className="px-2 py-1">{row.geo?.country || ''}</td>
                     <td className="px-2 py-1">{row.geo?.city || ''}</td>
-                    <td className="px-2 py-1">{row.geo?.ip || row.ipHashHint || ''}</td>
+                    <td className="px-2 py-1">{row.ipAddress || row.geo?.ip || row.ipHashHint || ''}</td>
                     <td className="px-2 py-1">{row.eventName === 'donation' ? 'Yes' : ''}</td>
                     <td className="px-2 py-1">{row.eventName}</td>
                     <td className="px-2 py-1">{row.context?.lastTouch?.source || row.context?.firstTouch?.source || ''}</td>

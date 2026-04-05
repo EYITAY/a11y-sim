@@ -6,7 +6,6 @@ import { Header } from './components/Header';
 import { Donation } from './components/Donation';
 import { initializeAnalytics, trackEvent } from './services/analyticsService';
 import AdminLogin from './components/AdminLogin';
-import AdminAnalytics from './components/AdminAnalytics';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import PrivacyPolicy from './pages/privacy';
 import TermsOfUse from './pages/terms';
@@ -85,7 +84,7 @@ const AppRoutes: React.FC = () => {
         <Route path="/" element={<LandingPage onLaunch={() => navigate('simulator')} />} />
         <Route path="/simulator" element={<SimulatorApp />} />
         <Route path="/admin-login" element={<AdminLogin onSuccess={() => navigate('admin-analytics')} />} />
-        <Route path="/admin-analytics" element={<AdminAnalytics />} />
+        <Route path="/admin-analytics" element={<AnalyticsDashboard />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfUse />} />
         <Route path="/refund" element={<RefundPolicy />} />

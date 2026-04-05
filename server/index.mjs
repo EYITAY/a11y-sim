@@ -1,10 +1,11 @@
 import path from 'node:path';
-import { appendFile } from 'node:fs/promises';
+import { appendFile, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import Stripe from 'stripe';
 import dotenv from 'dotenv';
+import postgres from 'postgres';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,6 +23,8 @@ const analyticsLogPath = path.join(projectRoot, 'server', 'data', 'events.ndjson
 const analyticsEvents = [];
 const maxInMemoryEvents = 2000;
 const analyticsAdminKey = process.env.VITE_ANALYTICS_ADMIN_KEY || '';
+const databaseUrl = process.env.DATABASE_URL || '';
+const sql = databaseUrl ? postgres(databaseUrl, { prepare: false }) : null;
 
 app.use(express.json({ limit: '1mb' }));
 app.use((req, res, next) => {
@@ -104,10 +107,167 @@ const sanitizeMetadata = (metadata = {}) => {
   return result;
 };
 
+const ensureAnalyticsAuthorized = (req, res) => {
+  if (!analyticsAdminKey) {
+    res.status(503).json({ error: 'ANALYTICS_ADMIN_KEY is not configured on the server.' });
+    return false;
+  }
+
+  const suppliedKeyHeader = req.headers['x-analytics-key'];
+  const suppliedKey = Array.isArray(suppliedKeyHeader) ? suppliedKeyHeader[0] : suppliedKeyHeader;
+
+  if (!suppliedKey || suppliedKey !== analyticsAdminKey) {
+    res.status(401).json({ error: 'Unauthorized analytics access.' });
+    return false;
+  }
+
+  return true;
+};
+
+const readLocalAnalyticsEvents = async () => {
+  try {
+    const raw = await readFile(analyticsLogPath, 'utf8');
+    return raw
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+  } catch {
+    return [...analyticsEvents];
+  }
+};
+
+const readAnalyticsEvents = async () => {
+  if (sql) {
+    const rows = await sql`
+      select
+        event_name,
+        properties,
+        context,
+        page_path,
+        occurred_at,
+        received_at,
+        ip_hint,
+        geo
+      from analytics_events
+      order by received_at desc
+      limit 500
+    `;
+
+    return rows.map((row) => ({
+      eventName: row.event_name,
+      properties: row.properties ?? {},
+      context: row.context ?? null,
+      pagePath: row.page_path,
+      occurredAt: row.occurred_at instanceof Date ? row.occurred_at.toISOString() : row.occurred_at,
+      receivedAt: row.received_at instanceof Date ? row.received_at.toISOString() : row.received_at,
+      ipAddress: row.ip_address ?? '',
+      ipHashHint: row.ip_hint ?? '',
+      geo: row.geo ?? {},
+    }));
+  }
+
+  const localEvents = await readLocalAnalyticsEvents();
+  return localEvents.slice(-500).reverse();
+};
+
+const buildAnalyticsSummary = (events, note) => {
+  const sourceCounts = {};
+  const eventCounts = {};
+  const countryCounts = {};
+  const cityCounts = {};
+  const currencies = {};
+  let totalPayments = 0;
+  let totalAmount = 0;
+
+  for (const event of events) {
+    eventCounts[event.eventName] = (eventCounts[event.eventName] || 0) + 1;
+
+    const source = event.context?.lastTouch?.source || event.context?.firstTouch?.source;
+    if (source) {
+      sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+    }
+
+    const country = event.geo?.country;
+    if (country) {
+      countryCounts[country] = (countryCounts[country] || 0) + 1;
+    }
+
+    const city = event.geo?.city;
+    if (city) {
+      cityCounts[city] = (cityCounts[city] || 0) + 1;
+    }
+
+    if (event.eventName === 'checkout_session_created') {
+      totalPayments += 1;
+
+      const amount = Number(event.properties?.amount || 0);
+      if (Number.isFinite(amount)) {
+        totalAmount += amount;
+      }
+
+      const currency = typeof event.properties?.currency === 'string' ? event.properties.currency : '';
+      if (currency) {
+        currencies[currency] = (currencies[currency] || 0) + 1;
+      }
+    }
+  }
+
+  return {
+    totals: {
+      events: events.length,
+      sources: Object.keys(sourceCounts).length,
+    },
+    sourceCounts,
+    eventCounts,
+    countryCounts,
+    cityCounts,
+    paymentStats: {
+      totalPayments,
+      totalAmount,
+      currencies,
+    },
+    note,
+  };
+};
+
 const logAnalyticsEvent = async (event) => {
   analyticsEvents.push(event);
   if (analyticsEvents.length > maxInMemoryEvents) {
     analyticsEvents.shift();
+  }
+
+  if (sql) {
+    await sql`
+      insert into analytics_events (
+        event_name,
+        properties,
+        context,
+        page_path,
+        occurred_at,
+        received_at,
+          ip_address,
+        ip_hint,
+        geo
+      ) values (
+        ${event.eventName},
+        ${sql.json(event.properties ?? {})},
+        ${event.context ? sql.json(event.context) : null},
+        ${event.pagePath},
+        ${event.occurredAt},
+        ${event.receivedAt},
+          ${event.ipAddress ?? ''},
+        ${event.ipHashHint ?? ''},
+        ${sql.json(event.geo ?? {})}
+      )
+    `;
+    return;
   }
 
   try {
@@ -143,6 +303,7 @@ app.post('/api/track', async (req, res) => {
       pagePath: trimValue(typeof pagePath === 'string' ? pagePath : '/', 300),
       occurredAt: typeof occurredAt === 'string' ? occurredAt : new Date().toISOString(),
       receivedAt: new Date().toISOString(),
+      ipAddress: trimValue(ip, 120),
       ipHashHint: trimValue(ip, 120),
       geo,
     };
@@ -155,39 +316,109 @@ app.post('/api/track', async (req, res) => {
   }
 });
 
-app.get('/api/analytics-summary', (_req, res) => {
-  if (!analyticsAdminKey) {
-    return res.status(503).json({ error: 'ANALYTICS_ADMIN_KEY is not configured on the server.' });
+app.get('/api/analytics-summary', async (req, res) => {
+  if (!ensureAnalyticsAuthorized(req, res)) {
+    return;
   }
 
-  const suppliedKeyHeader = _req.headers['x-analytics-key'];
-  const suppliedKey = Array.isArray(suppliedKeyHeader) ? suppliedKeyHeader[0] : suppliedKeyHeader;
+  try {
+    if (sql) {
+      const [totalsRow] = await sql`
+        select
+          count(*)::int as total_events,
+          count(distinct coalesce(context->'lastTouch'->>'source', context->'firstTouch'->>'source'))::int as total_sources
+        from analytics_events
+      `;
 
-  if (!suppliedKey || suppliedKey !== analyticsAdminKey) {
-    return res.status(401).json({ error: 'Unauthorized analytics access.' });
-  }
+      const sourceRows = await sql`
+        select
+          coalesce(context->'lastTouch'->>'source', context->'firstTouch'->>'source') as label,
+          count(*)::int as count
+        from analytics_events
+        where coalesce(context->'lastTouch'->>'source', context->'firstTouch'->>'source') is not null
+        group by label
+      `;
 
-  const sourceCounts = {};
-  const eventCounts = {};
+      const eventRows = await sql`
+        select event_name as label, count(*)::int as count
+        from analytics_events
+        group by event_name
+      `;
 
-  for (const event of analyticsEvents) {
-    eventCounts[event.eventName] = (eventCounts[event.eventName] || 0) + 1;
+      const countryRows = await sql`
+        select geo->>'country' as label, count(*)::int as count
+        from analytics_events
+        where geo->>'country' is not null and geo->>'country' <> ''
+        group by label
+      `;
 
-    const source = event.context?.lastTouch?.source || event.context?.firstTouch?.source;
-    if (source) {
-      sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+      const cityRows = await sql`
+        select geo->>'city' as label, count(*)::int as count
+        from analytics_events
+        where geo->>'city' is not null and geo->>'city' <> ''
+        group by label
+      `;
+
+      const [paymentRow] = await sql`
+        select
+          count(*)::int as total_payments,
+          coalesce(sum((properties->>'amount')::bigint), 0)::bigint as total_amount
+        from analytics_events
+        where event_name = 'checkout_session_created'
+      `;
+
+      const currencyRows = await sql`
+        select properties->>'currency' as label, count(*)::int as count
+        from analytics_events
+        where event_name = 'checkout_session_created'
+          and properties->>'currency' is not null
+          and properties->>'currency' <> ''
+        group by label
+      `;
+
+      return res.json({
+        totals: {
+          events: totalsRow?.total_events ?? 0,
+          sources: totalsRow?.total_sources ?? 0,
+        },
+        sourceCounts: Object.fromEntries(sourceRows.map((row) => [row.label, row.count])),
+        eventCounts: Object.fromEntries(eventRows.map((row) => [row.label, row.count])),
+        countryCounts: Object.fromEntries(countryRows.map((row) => [row.label, row.count])),
+        cityCounts: Object.fromEntries(cityRows.map((row) => [row.label, row.count])),
+        paymentStats: {
+          totalPayments: paymentRow?.total_payments ?? 0,
+          totalAmount: Number(paymentRow?.total_amount ?? 0),
+          currencies: Object.fromEntries(currencyRows.map((row) => [row.label, row.count])),
+        },
+        note: 'Summary is backed by Neon Postgres via DATABASE_URL.',
+      });
     }
+
+    const events = await readLocalAnalyticsEvents();
+    return res.json(
+      buildAnalyticsSummary(
+        events,
+        'Summary is based on local analytics events. Configure DATABASE_URL to persist analytics in Neon for production.'
+      )
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to load analytics summary.';
+    return res.status(500).json({ error: message });
+  }
+});
+
+app.get('/api/analytics-events', async (req, res) => {
+  if (!ensureAnalyticsAuthorized(req, res)) {
+    return;
   }
 
-  return res.json({
-    totals: {
-      events: analyticsEvents.length,
-      sources: Object.keys(sourceCounts).length,
-    },
-    sourceCounts,
-    eventCounts,
-    note: 'Summary is based on in-memory events since server start. Raw events are appended to server/data/events.ndjson.',
-  });
+  try {
+    const events = await readAnalyticsEvents();
+    return res.json({ events });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to load analytics events.';
+    return res.status(500).json({ error: message });
+  }
 });
 
 app.post('/api/analyze', async (req, res) => {
