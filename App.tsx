@@ -14,6 +14,7 @@ import DonationPolicy from './pages/donation-policy';
 import EUVisitors from './pages/eu';
 import CaliforniaVisitors from './pages/california';
 import Merch from './pages/merch';
+import { Analytics } from '@vercel/analytics/react';
 
 const AppRoutes: React.FC = () => {
   const [view, setView] = useState<'landing' | 'simulator' | 'analytics' | 'admin-login' | 'admin-analytics'>('landing');
@@ -104,6 +105,7 @@ const AppRoutes: React.FC = () => {
 const App: React.FC = () => (
   <Router>
     <AppRoutes />
+    <Analytics />
   </Router>
 );
 

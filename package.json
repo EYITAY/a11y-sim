@@ -17,6 +17,7 @@
   "dependencies": {
     "@google/genai": "^1.10.0",
     "@types/react-router-dom": "^5.3.3",
+    "@vercel/analytics": "^2.0.1",
     "concurrently": "^9.1.2",
     "dompurify": "^3.2.7",
     "dotenv": "^16.4.5",
